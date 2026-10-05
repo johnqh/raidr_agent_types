@@ -36,6 +36,8 @@ export interface IntentSlot {
 
 /** What the user wants, as classified by the `classify-intent` endpoint. */
 export interface AgentIntent {
+  /** Whether this request requires the device's current location. */
+  location_needed: boolean;
   /** Lowercase slug, e.g. `recipe`. */
   intent: string;
   /** raidr site labels that can answer it, most relevant first. */
@@ -102,7 +104,16 @@ export interface RunSiteSelection {
 export interface RunRequest {
   request: string;
   intent: AgentIntent;
+  /** Sent only after foreground location permission is granted. */
+  location?: GeoLocation;
   sites: RunSiteSelection[];
+}
+
+/** Geographic coordinates in decimal degrees. */
+export interface GeoLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
 }
 
 export interface RecipeDetails {
@@ -120,6 +131,8 @@ export interface ResultField {
 
 /** One answer card. */
 export interface ResultItem {
+  /** Location of this result, when the extractor can identify one. */
+  location?: GeoLocation | null;
   id: string;
   apiHost: string;
   siteTitle: string;
