@@ -124,6 +124,11 @@ export interface CandidateSite {
   authStyle: SiteAuthStyle;
   /** Why it was suggested for this intent (from site ranking). */
   reason?: string;
+  /**
+   * The site's largest raster icon (apple-touch-icon, web-app manifest icon
+   * or favicon), absolute https. Absent when none was found.
+   */
+  iconUrl?: string;
 }
 
 /** Body of `POST /intent`. */
@@ -400,6 +405,29 @@ export interface BestData {
   reason: string;
 }
 
+/** One copy of a merged result: which result, and what sets it apart. */
+export interface ResultGroupMember {
+  resultId: string;
+  /** Short difference from the other copies, e.g. "$85 · GA"; '' when none. */
+  note: string;
+}
+
+/**
+ * Results that are the same thing (the same concert on two ticket sites),
+ * shown as one item. `members[0]` is the one the item shows; at least two.
+ */
+export interface ResultGroup {
+  members: ResultGroupMember[];
+}
+
+/**
+ * Stream part `data-groups` (`all` runs, after every site finished): the
+ * duplicates merged by the `dedupe` step. Results in no group stand alone.
+ */
+export interface GroupsData {
+  groups: ResultGroup[];
+}
+
 /** The custom data parts of a run's UI message stream (`data-<key>`). */
 export type RaidrAgentDataParts = {
   run: RunData;
@@ -407,6 +435,7 @@ export type RaidrAgentDataParts = {
   call: CallData;
   result: ResultItem;
   best: BestData;
+  groups: GroupsData;
 };
 
 export type RunStatus = 'running' | 'done' | 'failed';
@@ -432,6 +461,8 @@ export interface RunDetail extends RunSummary {
   }>;
   results: ResultItem[];
   best?: BestData | null;
+  /** Merged duplicates of an `all` run; absent or [] when none. */
+  groups?: ResultGroup[];
 }
 
 // =============================================================================
@@ -452,7 +483,13 @@ export const LOCAL_LLM_PROVIDERS: readonly LocalLlmProvider[] = [
 
 /** One model decision in the agent flow (one ShapeShyft endpoint each). */
 export type AgentStep =
-  'understand' | 'rank-sites' | 'prepare' | 'plan' | 'extract' | 'pick-best';
+  | 'understand'
+  | 'rank-sites'
+  | 'prepare'
+  | 'plan'
+  | 'extract'
+  | 'pick-best'
+  | 'dedupe';
 
 export const AGENT_STEPS: readonly AgentStep[] = [
   'understand',
@@ -461,6 +498,7 @@ export const AGENT_STEPS: readonly AgentStep[] = [
   'plan',
   'extract',
   'pick-best',
+  'dedupe',
 ];
 
 /** Body of `POST /llm/payload`. For `understand` the server adds `vocabulary` itself. */
@@ -514,6 +552,7 @@ export interface RunImportRequest {
   calls: CallData[];
   results: ResultItem[];
   best?: BestData | null;
+  groups?: ResultGroup[];
 }
 
 /**
@@ -526,6 +565,15 @@ export const RUN_IMPORT_LIMITS = {
   calls: 200,
   results: 100,
 } as const;
+
+/**
+ * Answer of `GET /sites/:apiHost/icon`: the domain the site is known by (its
+ * first origin's host without `www.`) and its largest raster icon, or null.
+ */
+export interface SiteIconResponse {
+  domain: string;
+  iconUrl: string | null;
+}
 
 /** Answer of `POST /runs/import`. */
 export interface RunImportResponse {
