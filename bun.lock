@@ -6,7 +6,7 @@
       "name": "@sudobility/raidr_agent_types",
       "devDependencies": {
         "@eslint/js": "^9.38.0",
-        "@sudobility/raidr_types": "^0.1.11",
+        "@sudobility/raidr_types": "^0.1.14",
         "@sudobility/types": "^1.9.68",
         "@typescript-eslint/eslint-plugin": "^8.46.2",
         "@typescript-eslint/parser": "^8.46.2",
@@ -20,7 +20,7 @@
         "vitest": "^4.0.15",
       },
       "peerDependencies": {
-        "@sudobility/raidr_types": "^0.1.11",
+        "@sudobility/raidr_types": "^0.1.14",
         "@sudobility/types": "^1.9.68",
       },
     },
@@ -94,7 +94,7 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@sudobility/raidr_types": ["@sudobility/raidr_types@0.1.11", "", { "peerDependencies": { "@sudobility/types": "^1.9.68", "zod": "^4.0.0" }, "optionalPeers": ["zod"] }, "sha512-aePan2RbtX+m7SPlGZpxbZ0cgauoIoDAlm4TY9Dz3/+AXjrVdAr24aaX5zOXCroVqUUdWc5JXknJ+LvcmZmCyw=="],
+    "@sudobility/raidr_types": ["@sudobility/raidr_types@0.1.14", "", { "peerDependencies": { "@sudobility/types": "^1.9.68", "zod": "^4.0.0" }, "optionalPeers": ["zod"] }, "sha512-NO/NPGn1AoodZmjQI2dud5yxUgt39juj2g8tORNNazNoNLMukBsijvGwd/oJXweWzY38KFqfsqrFr49wZrlfmw=="],
 
     "@sudobility/types": ["@sudobility/types@1.9.68", "", {}, "sha512-4LL5+UfcqQcc0PKKR/z/PqS6j9DQPVkkjL+3oOW+Bwx0TAu1SVKAlPhlt/9ruNMW+abcHuZoFvbOVD5gdYBSGw=="],
 
