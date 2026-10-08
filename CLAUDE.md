@@ -40,6 +40,27 @@ src/
 └── index.test.ts
 ```
 
+## Agent types (`src/agent.ts`)
+
+The agent flow (`AgentIntent`, `CandidateSite`, `SiteAuthInfo`, `RunRequest`,
+`ResultItem`, the stream parts `RaidrAgentDataParts`, `RunSummary`/`RunDetail`)
+and local mode, where the app runs the loop itself with the user's own LLM key:
+
+- `LocalLlmProvider` (`openai|anthropic|deepseek|openrouter`) and
+  `LOCAL_LLM_PROVIDERS` (that order, the app's default).
+- `AgentStep` (`understand|rank-sites|prepare|plan|extract|pick-best`) and `AGENT_STEPS`.
+- `LlmPayloadRequest` / `LlmPayloadResponse` (`POST /llm/payload`);
+  `AiProviderRequest` is a structural copy of ShapeShyft's (`provider: string`;
+  no dependency on shapeshyft).
+- `CandidatesRequest` (`POST /candidates`).
+- v2 additions beyond the contract: `SitePageRoute.sources?` (`SitePageRouteSource`,
+  `SITE_PAGE_ROUTE_SOURCES` strongest first) and `SitePageRoute.query?` (rank routes
+  for page URLs); `SiteStatusData.needsSignIn?` (a failed site whose every call
+  was 401/403).
+- `RunImportRequest` / `RunImportResponse` (`POST /runs/import`) and
+  `RUN_IMPORT_LIMITS` (`sites` 8, `calls` 200, `results` 100) that the server
+  enforces and raidr_agent_lib's recorder caps to.
+
 ## Commands
 
 ```bash

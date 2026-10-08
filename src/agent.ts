@@ -8,6 +8,8 @@
  * them as `UIMessage<never, RaidrAgentDataParts>`.
  */
 
+import type { McpManifest } from '@sudobility/raidr_types';
+
 /** The shape of an answer; picks the result view. */
 export type ResultKind =
   | 'recipe'
@@ -34,9 +36,58 @@ export interface IntentSlot {
   value: string;
 }
 
-/** What the user wants, as classified by the `classify-intent` endpoint. */
+/**
+ * How the user picks sites and how results are shown:
+ * - `single`: one site; one detailed result (the best of what it returns).
+ * - `best`: several sites; results are compared and one best is shown (e.g. travel booking).
+ * - `all`: several sites; every result is listed together (e.g. apartment search).
+ */
+export type SelectionMode = 'single' | 'best' | 'all';
+
+export const SELECTION_MODES: readonly SelectionMode[] = [
+  'single',
+  'best',
+  'all',
+];
+
+/** Who the request is for. Usually the user alone. */
+export interface IntentWho {
+  kind: 'self' | 'party';
+  /** Number of people including the user, when known. */
+  partySize?: number;
+  /** e.g. `2 adults, 1 child`. */
+  description?: string;
+}
+
+/** When. `start`/`end` are ISO 8601 (date or date-time) resolved against the user's clock. */
+export interface IntentWhen {
+  /** The user's words, e.g. `tonight`, `next weekend`. */
+  text: string;
+  start?: string;
+  end?: string;
+}
+
+/** One place the request names. */
+export interface IntentPlace {
+  name: string;
+  role?: 'area' | 'origin' | 'destination' | 'stop';
+}
+
+/**
+ * Where. `current`: near the device (location is asked for); `place`: one
+ * named place; `places`: several (e.g. a trip's origin and destination).
+ */
+export interface IntentWhere {
+  kind: 'current' | 'place' | 'places';
+  places: IntentPlace[];
+}
+
+/**
+ * What the user wants, understood with the six W's in mind (the
+ * `understand-intent` endpoint). A W that does not apply is `null`.
+ */
 export interface AgentIntent {
-  /** Whether this request requires the device's current location. */
+  /** Whether this request requires the device's current location (`where.kind === 'current'`). */
   location_needed: boolean;
   /** Lowercase slug, e.g. `recipe`. */
   intent: string;
@@ -46,6 +97,15 @@ export interface AgentIntent {
   resultKind: ResultKind;
   /** Search query to send to the sites. */
   query: string;
+  /** The action, e.g. `find events`. */
+  what: string;
+  who: IntentWho | null;
+  /** Constraints or preferences, e.g. `cheapest`, `under $2000/month`. */
+  how: string | null;
+  when: IntentWhen | null;
+  where: IntentWhere | null;
+  why: string | null;
+  selection: SelectionMode;
 }
 
 /** How a site's signed-in token travels (raidr's `McpAuth.style`). */
@@ -62,11 +122,21 @@ export interface CandidateSite {
   toolCount: number;
   /** `none`: usable without signing in. */
   authStyle: SiteAuthStyle;
+  /** Why it was suggested for this intent (from site ranking). */
+  reason?: string;
 }
 
 /** Body of `POST /intent`. */
 export interface IntentRequest {
   request: string;
+  /** ISO 3166-1 alpha-2 of the device's region, e.g. `US`. Ranks sites. */
+  country?: string;
+  /** BCP 47, e.g. `en-US`. */
+  locale?: string;
+  /** IANA zone, e.g. `America/Los_Angeles`; resolves `when`. */
+  timeZone?: string;
+  /** ISO 8601 of the device clock; resolves `when`. */
+  now?: string;
 }
 
 /** Answer of `POST /intent`. */
@@ -98,6 +168,8 @@ export interface RunSiteSelection {
   apiHost: string;
   /** The site token from the device's secure storage. Used for this run only, never stored. */
   token?: string;
+  /** Tools `prepare` chose, most useful first; the planner sees these first. */
+  tools?: string[];
 }
 
 /** The run's input, sent alongside the AI SDK chat request to `POST /runs`. */
@@ -107,6 +179,137 @@ export interface RunRequest {
   /** Sent only after foreground location permission is granted. */
   location?: GeoLocation;
   sites: RunSiteSelection[];
+  /** The user's answers to the prepared form, keyed by {@link FormField.name}. */
+  inputs?: Record<string, FormValue>;
+}
+
+// =============================================================================
+// Prepare: per chosen site, which tools, whether sign-in is needed, which inputs
+// =============================================================================
+
+/** Per-endpoint auth from raidr's API docs (`ApiEndpoint.auth`). */
+export type ToolAuth = 'none' | 'user' | 'api_key';
+
+/** A value the user entered in the prepared form. */
+export type FormValue = string | number | boolean | string[];
+
+export type FormFieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'select'
+  | 'multiselect'
+  | 'boolean';
+
+/**
+ * One input the user is asked for before the run. Names are canonical
+ * snake_case (`category`, `keyword`, `start_date`, `price_max`, `party_size`…)
+ * so the same field from several sites is asked once.
+ */
+export interface FormField {
+  name: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  description?: string;
+  options?: { value: string; label: string }[];
+  /** Prefilled from the intent when it already says it. */
+  default?: FormValue;
+}
+
+/**
+ * Whether a site needs the user signed in for this request:
+ * `required` — the request is about the user's own data (or every useful tool is signed-in only);
+ * `fallback` — tools are flagged signed-in but the request is public: run without asking (with a stored token if the user has one), ask only on 401/403;
+ * `none`.
+ */
+export type SiteLogin = 'required' | 'fallback' | 'none';
+
+/** `prepare` result for one site. */
+export interface SitePlan {
+  apiHost: string;
+  title: string;
+  tools: string[];
+  login: SiteLogin;
+  /** Shown to the user when `login !== 'none'`. */
+  loginReason?: string;
+  /** Set when the site cannot serve this request (it is then left out). */
+  unsupported?: string;
+}
+
+/** Body of `POST /prepare`. */
+export interface PrepareRequest {
+  request: string;
+  intent: AgentIntent;
+  sites: string[];
+  location?: GeoLocation;
+}
+
+/** Answer of `POST /prepare`: per-site plans plus one merged form. */
+export interface PrepareResponse {
+  sites: SitePlan[];
+  form: FormField[];
+}
+
+/** An API response field: `endpoint` is the endpoint key (`GET /event/{id}`), `field` a dotted path with `[]` for array items (`entries[].event.url`). */
+export interface ResponseFieldRef {
+  endpoint: string;
+  field: string;
+}
+
+/**
+ * A page on the site (raidr `SiteRoute`), found by raidr_crawler in the site's
+ * routing code. Results get their page URL from these deterministically:
+ * a `urlFields` value read from the result's response item, or `url` filled
+ * from the item's fields named by each param's `sources`. Never generated.
+ */
+export interface SitePageRoute {
+  /** Absolute template, e.g. `https://luma.com/{slug}`. */
+  url: string;
+  description?: string;
+  params: { name: string; description?: string; sources: ResponseFieldRef[] }[];
+  /** Response fields that hold this page's full URL. */
+  urlFields: ResponseFieldRef[];
+  /** How raidr found the route, strongest first (`router` > `code` > `response` > `visited` > `link`); ranks routes. */
+  sources?: SitePageRouteSource[];
+  /** Query parameter names the site adds to this URL; fewer is preferred. */
+  query?: string[];
+}
+
+/** raidr's `SiteRouteSource`: how a route was found, strongest first. */
+export type SitePageRouteSource =
+  'router' | 'code' | 'response' | 'visited' | 'link';
+
+/** Every {@link SitePageRouteSource}, strongest first. */
+export const SITE_PAGE_ROUTE_SOURCES: readonly SitePageRouteSource[] = [
+  'router',
+  'code',
+  'response',
+  'visited',
+  'link',
+];
+
+/**
+ * Where a result came from, so its page URL can be built from the raw
+ * response: the call, and the JSON path of the item inside its body
+ * (`entries[3]`, or `` for the whole body).
+ */
+export interface ResultSource {
+  callId: string;
+  tool: string;
+  /** The tool's endpoint key (`GET /discover/bootstrap-page`). */
+  endpoint: string;
+  itemPath: string;
+}
+
+/** Everything the agent needs about one site: `GET /sites/:apiHost/context`. */
+export interface SiteContext {
+  manifest: McpManifest;
+  /** Tool name → its endpoint's auth; tools without an API-doc match are absent. */
+  toolAuth: Record<string, ToolAuth>;
+  /** Page routes of the site's origins (capped). */
+  routes: SitePageRoute[];
 }
 
 /** Geographic coordinates in decimal degrees. */
@@ -142,6 +345,13 @@ export interface ResultItem {
   imageUrl: string;
   /** Absolute URL or empty. */
   sourceUrl: string;
+  /**
+   * The result's page on the site, built from {@link SitePageRoute}s and the
+   * raw response item (host is one of the site's origins); empty when no route
+   * maps to the item. Opened in the browser.
+   */
+  pageUrl: string;
+  source?: ResultSource;
   /** Filled for `recipe` results. */
   recipe: RecipeDetails | null;
   fields: ResultField[];
@@ -158,6 +368,11 @@ export interface SiteStatusData {
   /** Why it failed, or what it is doing. */
   message?: string;
   resultCount?: number;
+  /**
+   * Set on a failed site when every call it made was refused with 401/403:
+   * the app offers "Sign in to <site> and retry".
+   */
+  needsSignIn?: boolean;
 }
 
 /** Stream part `data-call`: one API call (id = callId, so it updates in place). */
@@ -179,12 +394,19 @@ export interface RunData {
   resultCount?: number;
 }
 
+/** Stream part `data-best` (`best`/`single` runs): the chosen result. */
+export interface BestData {
+  resultId: string;
+  reason: string;
+}
+
 /** The custom data parts of a run's UI message stream (`data-<key>`). */
 export type RaidrAgentDataParts = {
   run: RunData;
   'site-status': SiteStatusData;
   call: CallData;
   result: ResultItem;
+  best: BestData;
 };
 
 export type RunStatus = 'running' | 'done' | 'failed';
@@ -209,4 +431,103 @@ export interface RunDetail extends RunSummary {
     error: string | null;
   }>;
   results: ResultItem[];
+  best?: BestData | null;
+}
+
+// =============================================================================
+// Local mode: the device calls the LLM provider and the sites itself
+// =============================================================================
+
+/** Providers the app can call directly with the user's own key. */
+export type LocalLlmProvider =
+  'openai' | 'anthropic' | 'deepseek' | 'openrouter';
+
+/** Every {@link LocalLlmProvider}, in the app's default order. */
+export const LOCAL_LLM_PROVIDERS: readonly LocalLlmProvider[] = [
+  'openai',
+  'anthropic',
+  'deepseek',
+  'openrouter',
+];
+
+/** One model decision in the agent flow (one ShapeShyft endpoint each). */
+export type AgentStep =
+  'understand' | 'rank-sites' | 'prepare' | 'plan' | 'extract' | 'pick-best';
+
+export const AGENT_STEPS: readonly AgentStep[] = [
+  'understand',
+  'rank-sites',
+  'prepare',
+  'plan',
+  'extract',
+  'pick-best',
+];
+
+/** Body of `POST /llm/payload`. For `understand` the server adds `vocabulary` itself. */
+export interface LlmPayloadRequest {
+  step: AgentStep;
+  input: Record<string, unknown>;
+  provider: LocalLlmProvider;
+  model?: string;
+}
+
+/**
+ * The provider request ShapeShyft `/prompt` builds: the device adds the auth
+ * header (`auth.header: auth.prefix + key`) and sends it. A structural copy
+ * of ShapeShyft's `AiProviderRequest` (whose `provider` is its `LlmProvider`).
+ */
+export interface AiProviderRequest {
+  provider: string;
+  model: string;
+  method: 'POST';
+  /** Full chat URL. */
+  url: string;
+  /** Non-secret headers, e.g. `content-type`, `anthropic-version`. */
+  headers: Record<string, string>;
+  /** Where the user's key goes: `{ header: 'Authorization', prefix: 'Bearer ' }` or `{ header: 'x-api-key', prefix: '' }`. */
+  auth: { header: string; prefix: string };
+  /** Exactly what a server-side invoke would send. */
+  body: Record<string, unknown>;
+}
+
+/** Answer of `POST /llm/payload`. */
+export interface LlmPayloadResponse {
+  request: AiProviderRequest;
+}
+
+/** Body of `POST /candidates`: the intent's labels, most relevant first. Unranked label matches (local mode ranks them with `rank-sites`). */
+export interface CandidatesRequest {
+  labels: string[];
+}
+
+/** Body of `POST /runs/import`: a run the device ran locally, for History. */
+export interface RunImportRequest {
+  request: string;
+  intent: AgentIntent;
+  status: 'done' | 'failed';
+  /** ISO 8601. */
+  createdAt: string;
+  /** ISO 8601. */
+  finishedAt: string;
+  sites: { apiHost: string; status: 'done' | 'failed'; error?: string }[];
+  /** Finished calls only (`ok` or `error`). */
+  calls: CallData[];
+  results: ResultItem[];
+  best?: BestData | null;
+}
+
+/**
+ * Caps `POST /runs/import` enforces (the server answers 400 above them).
+ * `sites` matches `POST /runs`; a run plans at most 4 rounds of 3 calls per
+ * site and extracts at most 10 results per site.
+ */
+export const RUN_IMPORT_LIMITS = {
+  sites: 8,
+  calls: 200,
+  results: 100,
+} as const;
+
+/** Answer of `POST /runs/import`. */
+export interface RunImportResponse {
+  runId: string;
 }
