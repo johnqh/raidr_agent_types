@@ -48,7 +48,10 @@ and local mode, where the app runs the loop itself with the user's own LLM key:
 
 - `LocalLlmProvider` (`openai|anthropic|deepseek|openrouter`) and
   `LOCAL_LLM_PROVIDERS` (that order, the app's default).
-- `AgentStep` (`understand|rank-sites|prepare|plan|extract|pick-best`) and `AGENT_STEPS`.
+- `AgentStep` (`understand|plan-search|rank-sites|prepare|plan|extract|pick-best|dedupe`) and `AGENT_STEPS`.
+- Web search before ranking: `SearchPlan` (`query`, `country`, `reason`),
+  `SearchHit` (`url`, `title`, `snippet`), `CandidateSite.searchHits?` and
+  `IntentResponse.search?` (`SearchSummary`).
 - `LlmPayloadRequest` / `LlmPayloadResponse` (`POST /llm/payload`);
   `AiProviderRequest` is a structural copy of ShapeShyft's (`provider: string`;
   no dependency on shapeshyft).

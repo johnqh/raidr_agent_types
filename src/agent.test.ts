@@ -39,6 +39,7 @@ describe('v2 workflow types', () => {
   it('lists steps, selection modes and route sources once, in order', () => {
     expect(AGENT_STEPS).toEqual([
       'understand',
+      'plan-search',
       'rank-sites',
       'prepare',
       'plan',

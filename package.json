@@ -1,6 +1,6 @@
 {
   "name": "@sudobility/raidr_agent_types",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "TypeScript types for the RaidrAgent API",
   "type": "module",
   "main": "./dist/index.js",

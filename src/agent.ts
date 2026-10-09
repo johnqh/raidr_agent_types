@@ -129,6 +129,51 @@ export interface CandidateSite {
    * or favicon), absolute https. Absent when none was found.
    */
   iconUrl?: string;
+  /**
+   * Web search results on this site for the request (at most 3), when the
+   * `plan-search` step chose to search and the search found the site.
+   */
+  searchHits?: SearchHit[];
+}
+
+/**
+ * The `plan-search` step's decision: search the web first for this request.
+ * A request naming a specific thing (an artist's concert tickets, a product
+ * model) benefits; a generic one ("events around me") does not, and gets no
+ * plan.
+ */
+export interface SearchPlan {
+  /** The query to send, in the language people in `country` search in. */
+  query: string;
+  /**
+   * ISO 3166-1 alpha-2 of the region whose web to search (`CN` gets Chinese
+   * sites), usually the user's; null searches worldwide.
+   */
+  country: string | null;
+  /** Why searching helps (for logs and the UI). */
+  reason: string;
+}
+
+/** One web search result. */
+export interface SearchHit {
+  /** Absolute http(s) URL. */
+  url: string;
+  title: string;
+  snippet: string;
+}
+
+/** What the optional search did for `POST /intent`. */
+export interface SearchSummary {
+  query: string;
+  country: string | null;
+  /** Results the engine returned. */
+  hits: number;
+  /** Catalog sites (apiHosts) the results led to. */
+  matched: string[];
+  /** Result origins not in the catalog, queued for crawling. */
+  queued: string[];
+  /** Set when the search itself failed (the flow went on without it). */
+  error?: string;
 }
 
 /** Body of `POST /intent`. */
@@ -148,6 +193,8 @@ export interface IntentRequest {
 export interface IntentResponse {
   intent: AgentIntent;
   candidates: CandidateSite[];
+  /** Present when the request was searched first (`plan-search`). */
+  search?: SearchSummary;
 }
 
 /**
@@ -484,6 +531,7 @@ export const LOCAL_LLM_PROVIDERS: readonly LocalLlmProvider[] = [
 /** One model decision in the agent flow (one ShapeShyft endpoint each). */
 export type AgentStep =
   | 'understand'
+  | 'plan-search'
   | 'rank-sites'
   | 'prepare'
   | 'plan'
@@ -493,6 +541,7 @@ export type AgentStep =
 
 export const AGENT_STEPS: readonly AgentStep[] = [
   'understand',
+  'plan-search',
   'rank-sites',
   'prepare',
   'plan',
@@ -573,6 +622,20 @@ export const RUN_IMPORT_LIMITS = {
 export interface SiteIconResponse {
   domain: string;
   iconUrl: string | null;
+}
+
+/**
+ * One row of `GET /sites/search?q=`: a site whose domain contains the query
+ * and that has something to sign in to (`authStyle` is never `'none'`).
+ * `apiHost` is what `GET /sites/:apiHost/auth` and the login web view take.
+ */
+export interface SiteSearchHit {
+  /** The site's host without `www.` (`suno.com`). */
+  domain: string;
+  origin: string;
+  apiHost: string;
+  title: string;
+  authStyle: SiteAuthStyle;
 }
 
 /** Answer of `POST /runs/import`. */
